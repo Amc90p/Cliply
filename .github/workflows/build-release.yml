@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.2.5)'
+        required: false
 
 permissions:
   contents: write
@@ -116,11 +120,14 @@ jobs:
       - name: Determine tag
         id: info
         run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG="${{ github.ref_name }}"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
           else
-            echo "tag=v${{ needs.build-macos.outputs.app_version }}" >> "$GITHUB_OUTPUT"
+            TAG="v$(node -p "require('./package.json').version")"
           fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:
@@ -131,17 +138,6 @@ jobs:
         with:
           name: cliply-windows
           path: artifacts/windows
-
-      - name: Create tag if needed
-        if: github.ref_type != 'tag'
-        run: |
-          TAG="${{ steps.info.outputs.tag }}"
-          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag -a "$TAG" -m "Release $TAG"
-            git push origin "$TAG"
-          fi
 
       - name: Create GitHub Release
         run: |

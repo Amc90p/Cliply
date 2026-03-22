@@ -9,54 +9,37 @@ permissions:
   contents: write
 
 jobs:
-  tag-and-release:
-    # only run when an auto-update PR is merged (not just closed)
+  tag-and-build:
     if: >
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'auto-update/')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
 
-      - name: Read app version
-        id: version
+      - name: Determine tag
+        id: tag
         run: |
-          APP_VERSION=$(node -p "require('./package.json').version")
-          TAG="v${APP_VERSION}"
-          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          TAG="v$(node -p "require('./package.json').version")"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "App version: $APP_VERSION, Tag: $TAG"
 
-      - name: Check if tag already exists
-        id: tag_check
+      - name: Create tag
         run: |
-          TAG="${{ steps.version.outputs.tag }}"
+          TAG="${{ steps.tag.outputs.tag }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists, skipping"
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG already exists"
           else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
           fi
 
-      - name: Create and push tag
-        if: steps.tag_check.outputs.exists != 'true'
-        run: |
-          TAG="${{ steps.version.outputs.tag }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release $TAG — yt-dlp update"
-          git push origin "$TAG"
-          echo "Pushed tag $TAG — this will trigger the build-release workflow"
-
-      - name: Trigger build workflow (fallback)
-        if: steps.tag_check.outputs.exists == 'true'
-        run: |
-          echo "Tag already existed, triggering build-release via workflow_dispatch"
-          gh workflow run build-release.yml
+      - name: Trigger build
+        run: gh workflow run build-release.yml -f tag=${{ steps.tag.outputs.tag }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
