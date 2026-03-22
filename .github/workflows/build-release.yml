@@ -150,14 +150,25 @@ jobs:
           name: cliply-windows
           path: artifacts/windows
 
+      - name: List downloaded artifacts
+        run: find artifacts -type f
+
       - name: Create GitHub Release
         run: |
           TAG="${{ steps.info.outputs.tag }}"
 
           FILES=()
-          for f in artifacts/macos/dist/* artifacts/windows/dist/*; do
-            [ -f "$f" ] && FILES+=("$f")
-          done
+          while IFS= read -r f; do
+            FILES+=("$f")
+          done < <(find artifacts -type f \( -name "*.dmg" -o -name "*Setup*.exe" -o -name "latest*.yml" \))
+
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::error::No release files found in artifacts"
+            exit 1
+          fi
+
+          echo "Attaching ${#FILES[@]} files:"
+          printf '  %s\n' "${FILES[@]}"
 
           gh release delete "$TAG" --yes 2>/dev/null || true
 
