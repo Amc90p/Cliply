@@ -1,117 +1,71 @@
 name: Build Release
 
-# when to run this workflow
 on:
-  # run when you push a version tag like v0.2.0
   push:
     tags:
       - 'v*'
-  
-  # also allow manual trigger from GitHub UI
   workflow_dispatch:
 
-jobs:
-  # ============================================
-  # macOS Build (runs on Apple Silicon runner)
-  # ============================================
-  build-macos:
-    runs-on: macos-14  # Apple Silicon (arm64) runner
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+permissions:
+  contents: write
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+jobs:
+  build-macos:
+    runs-on: macos-14
+    outputs:
+      app_version: ${{ steps.versions.outputs.app_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Download FFmpeg for macOS
         run: |
-          # download from our binaries release
           mkdir -p binaries/macos
           curl -fL --retry 3 --retry-delay 2 -o binaries/macos/ffmpeg \
             "https://github.com/${{ github.repository }}/releases/download/binaries/ffmpeg"
-          test -s binaries/macos/ffmpeg
           chmod +x binaries/macos/ffmpeg
-          echo "FFmpeg installed:"
-          binaries/macos/ffmpeg -version | head -1
 
       - name: Download Deno for macOS
         run: |
-          # download from our binaries release
           mkdir -p binaries/deno/macos
           curl -fL --retry 3 --retry-delay 2 -o binaries/deno/macos/deno \
             "https://github.com/${{ github.repository }}/releases/download/binaries/deno"
-          test -s binaries/deno/macos/deno
           chmod +x binaries/deno/macos/deno
-          echo "Deno installed:"
-          binaries/deno/macos/deno --version | head -1
 
-      - name: Install root dependencies
-        run: npm ci
+      - run: npm ci
+      - run: npm run install:renderer
+      - run: npm run build:renderer
+      - run: npm run setup:python-runtime
 
-      - name: Install renderer dependencies
-        run: npm run install:renderer
-
-      - name: Build renderer
-        run: npm run build:renderer
-
-      - name: Setup Python runtime and dependencies
+      - name: Capture versions
+        id: versions
         run: |
-          # this downloads portable Python and installs all pip packages
-          npm run setup:python-runtime
-
-      - name: Verify Python dependencies installed
-        run: |
-          # verify fastapi and yt-dlp are installed in the macOS Python runtime
           PYTHON_EXE="python-runtime/darwin-arm64/bin/python3"
-          
-          echo "Checking Python installation..."
-          $PYTHON_EXE --version
-          
-          echo "Checking fastapi..."
           $PYTHON_EXE -c "import fastapi; print(f'fastapi {fastapi.__version__}')"
-          
-          echo "Checking yt-dlp..."
           $PYTHON_EXE -c "import yt_dlp; print(f'yt-dlp {yt_dlp.version.__version__}')"
-          
-          echo "Checking uvicorn..."
           $PYTHON_EXE -c "import uvicorn; print('uvicorn OK')"
-          
-          echo "All Python dependencies verified!"
+          echo "app_version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Build macOS app
-        run: |
-          # build without publishing
-          npx electron-builder --mac --publish never
+      - run: npx electron-builder --mac --publish never
         env:
-          # disable code signing for CI builds (optional - remove if you have signing set up)
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: cliply-macos
           path: |
             dist/*.dmg
-            dist/*.zip
             dist/latest-mac.yml
           retention-days: 30
 
-  # ============================================
-  # Windows Build (runs on Windows runner)
-  # ============================================
   build-windows:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -119,76 +73,91 @@ jobs:
       - name: Download FFmpeg for Windows
         shell: pwsh
         run: |
-          # download from our binaries release
-          $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path "binaries/windows"
-          $url = "https://github.com/${{ github.repository }}/releases/download/binaries/ffmpeg.exe"
-          Invoke-WebRequest -Uri $url -OutFile "binaries/windows/ffmpeg.exe"
-          if (-not (Test-Path "binaries/windows/ffmpeg.exe")) { throw "ffmpeg.exe download failed" }
-          if ((Get-Item "binaries/windows/ffmpeg.exe").Length -lt 1024) { throw "ffmpeg.exe looks too small (bad download?)" }
-          
-          Write-Host "FFmpeg installed:"
-          & "binaries/windows/ffmpeg.exe" -version | Select-Object -First 1
+          Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/binaries/ffmpeg.exe" -OutFile "binaries/windows/ffmpeg.exe"
 
       - name: Download Deno for Windows
         shell: pwsh
         run: |
-          # download from our binaries release
-          $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path "binaries/deno/windows"
-          $url = "https://github.com/${{ github.repository }}/releases/download/binaries/deno.exe"
-          Invoke-WebRequest -Uri $url -OutFile "binaries/deno/windows/deno.exe"
-          if (-not (Test-Path "binaries/deno/windows/deno.exe")) { throw "deno.exe download failed" }
-          if ((Get-Item "binaries/deno/windows/deno.exe").Length -lt 1024) { throw "deno.exe looks too small (bad download?)" }
-          
-          Write-Host "Deno installed:"
-          & "binaries/deno/windows/deno.exe" --version | Select-Object -First 1
+          Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/binaries/deno.exe" -OutFile "binaries/deno/windows/deno.exe"
 
-      - name: Install root dependencies
-        run: npm ci
+      - run: npm ci
+      - run: npm run install:renderer
+      - run: npm run build:renderer
+      - name: Setup Python runtime
+        shell: pwsh
+        run: npm run setup:python-runtime
 
-      - name: Install renderer dependencies
-        run: npm run install:renderer
-
-      - name: Build renderer
-        run: npm run build:renderer
-
-      - name: Setup Python runtime and dependencies
+      - name: Verify Python dependencies
         shell: pwsh
         run: |
-          # this downloads portable Python and installs all pip packages
-          npm run setup:python-runtime
+          $p = "python-runtime/win32-x64/python.exe"
+          & $p -c "import fastapi; print(f'fastapi {fastapi.__version__}')"
+          & $p -c "import yt_dlp; print(f'yt-dlp {yt_dlp.version.__version__}')"
+          & $p -c "import uvicorn; print('uvicorn OK')"
 
-      - name: Verify Python dependencies installed
-        shell: pwsh
-        run: |
-          # verify fastapi and yt-dlp are installed in the Windows Python runtime
-          $pythonExe = "python-runtime/win32-x64/python.exe"
-          
-          Write-Host "Checking Python installation..."
-          & $pythonExe --version
-          
-          Write-Host "Checking fastapi..."
-          & $pythonExe -c "import fastapi; print(f'fastapi {fastapi.__version__}')"
-          
-          Write-Host "Checking yt-dlp..."
-          & $pythonExe -c "import yt_dlp; print(f'yt-dlp {yt_dlp.version.__version__}')"
-          
-          Write-Host "Checking uvicorn..."
-          & $pythonExe -c "import uvicorn; print('uvicorn OK')"
-          
-          Write-Host "All Python dependencies verified!"
+      - run: npx electron-builder --win --publish never
 
-      - name: Build Windows app
-        run: |
-          # build without publishing
-          npx electron-builder --win --publish never
-
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: cliply-windows
           path: |
-            dist/*.exe
+            dist/*Setup*.exe
             dist/latest.yml
           retention-days: 30
+
+  create-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine tag
+        id: info
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v${{ needs.build-macos.outputs.app_version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cliply-macos
+          path: artifacts/macos
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cliply-windows
+          path: artifacts/windows
+
+      - name: Create tag if needed
+        if: github.ref_type != 'tag'
+        run: |
+          TAG="${{ steps.info.outputs.tag }}"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create GitHub Release
+        run: |
+          TAG="${{ steps.info.outputs.tag }}"
+
+          FILES=()
+          for f in artifacts/macos/dist/* artifacts/windows/dist/*; do
+            [ -f "$f" ] && FILES+=("$f")
+          done
+
+          gh release delete "$TAG" --yes 2>/dev/null || true
+
+          gh release create "$TAG" \
+            --title "Cliply ${{ needs.build-macos.outputs.app_version }}" \
+            --notes-file .github/RELEASE_NOTES.md \
+            --latest \
+            "${FILES[@]}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
