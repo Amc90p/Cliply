@@ -7,8 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.2.5)'
+        description: 'Release tag (e.g. v0.2.5). If set, checkout uses this ref; must exist on the remote.'
         required: false
+
+# One release at a time — avoids two runs deleting/recreating the same GitHub Release
+concurrency:
+  group: cliply-build-release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -20,6 +25,8 @@ jobs:
       app_version: ${{ steps.versions.outputs.app_version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -69,6 +76,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -116,6 +125,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
 
       - name: Determine tag
         id: info
