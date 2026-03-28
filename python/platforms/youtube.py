@@ -1,12 +1,4 @@
-"""
-YouTube platform service module.
-
-This module encapsulates all YouTube-specific functionality including:
-- Video/playlist information extraction
-- Video/audio downloads with time range support
-- Playlist batch downloads with ZIP archive creation
-- Cookie management for authenticated requests
-"""
+"""youtube download service."""
 
 import os
 import re
@@ -34,7 +26,7 @@ from shared_utils import (
 
 
 # =============================================================================
-# COOKIES DIRECTORY
+# cookie manager
 # =============================================================================
 
 def get_cookies_directory():
@@ -42,7 +34,7 @@ def get_cookies_directory():
 
 
 # =============================================================================
-# PYDANTIC MODELS
+# pydantic models
 # =============================================================================
 
 class TimeRange(BaseModel):
@@ -124,8 +116,8 @@ class AudioDownloadRequest(BaseModel):
 
 class PlaylistInfoRequest(BaseModel):
     url: str
-    max_videos: Optional[int] = 50  # Limit to prevent overwhelming requests
-    include_formats: bool = False   # Whether to extract format info for each video
+    max_videos: Optional[int] = 50
+    include_formats: bool = False
     
     @field_validator('url')
     @classmethod
@@ -149,7 +141,7 @@ class PlaylistVideoInfo(BaseModel):
     uploader: str
     index: int
     url: str
-    video_formats: List[Format] = []  # Reuse existing Format model
+    video_formats: List[Format] = []
     audio_formats: List[Format] = []
 
 
@@ -164,10 +156,10 @@ class PlaylistInfoResponse(BaseModel):
 
 class PlaylistDownloadRequest(BaseModel):
     url: str
-    selected_videos: List[int]  # List of video indices to download
-    video_format_id: Optional[str] = None  # If None, download audio only
+    selected_videos: List[int]
+    video_format_id: Optional[str] = None  # None means audio-only
     audio_format_id: str
-    archive_name: Optional[str] = None  # Custom name for ZIP archive
+    archive_name: Optional[str] = None
     
     @field_validator('selected_videos')
     @classmethod
@@ -224,11 +216,10 @@ class CookieManager:
 
 
 # =============================================================================
-# YOUTUBE UTILITY FUNCTIONS
+# utility functions
 # =============================================================================
 
 def is_youtube_shorts(url: str) -> bool:
-    """Check if URL is a YouTube Shorts URL"""
     return '/shorts/' in url.lower()
 
 
@@ -295,7 +286,6 @@ def get_quality_label(video_format_id: str) -> str:
 
 
 def get_enhanced_ydl_opts(base_opts: dict = None, ffmpeg_path: Optional[str] = None, deno_path: Optional[str] = None) -> dict:
-    """Get enhanced yt-dlp options with FFmpeg and Deno paths."""
     if base_opts is None:
         base_opts = {}
     
@@ -307,11 +297,10 @@ def get_enhanced_ydl_opts(base_opts: dict = None, ffmpeg_path: Optional[str] = N
         'fragment_retries': 2,
     }
     
-    # Add FFmpeg location if available
     if ffmpeg_path:
         simple_opts['ffmpeg_location'] = ffmpeg_path
     
-    # Add Deno runtime for JavaScript execution (required for yt-dlp 2025.11.12+)
+    # deno required for yt-dlp 2025.11.12+
     if deno_path:
         simple_opts['js_runtimes'] = {'deno': {'path': deno_path}}
     
@@ -329,7 +318,7 @@ def get_ydl_opts_with_time_range(base_opts: dict, time_range: Optional[TimeRange
 
 
 # =============================================================================
-# ASYNC WRAPPERS
+# async wrappers
 # =============================================================================
 
 def _extract_info_blocking(url: str, opts: dict) -> dict:
@@ -357,13 +346,11 @@ async def download_async(url: str, opts: dict) -> None:
 # =============================================================================
 
 async def download_with_fallback(url: str, base_opts: dict, ffmpeg_path: Optional[str] = None, deno_path: Optional[str] = None) -> None:
-    """Download using yt-dlp's built-in retry mechanisms"""
     opts = get_enhanced_ydl_opts(base_opts, ffmpeg_path, deno_path)
     await download_async(url, opts)
 
 
 async def extract_video_info_with_fallback(url: str, ffmpeg_path: Optional[str] = None, deno_path: Optional[str] = None) -> dict:
-    """Extract video info using yt-dlp's built-in retry mechanisms"""
     opts = get_enhanced_ydl_opts(None, ffmpeg_path, deno_path)
     return await extract_info_async(url, opts)
 
@@ -376,7 +363,6 @@ async def extract_playlist_info_with_fallback(
     deno_path: Optional[str] = None,
     cookie_manager: Optional[CookieManager] = None
 ) -> dict:
-    """Extract playlist info using yt-dlp's built-in retry mechanisms"""
     base_playlist_opts = {
         'extract_flat': not include_formats,
         'playlist_items': f'1:{max_videos}',
@@ -387,7 +373,7 @@ async def extract_playlist_info_with_fallback(
         return await extract_info_async(url, opts)
     except Exception as e:
         error_msg = str(e)
-        # Handle the specific cookie-related error for playlists
+        # playlists often require cookies when youtube triggers bot detection
         if "Sign in to confirm" in error_msg and cookie_manager and not cookie_manager.has_valid_cookies():
             raise HTTPException(
                 status_code=503,
@@ -402,7 +388,7 @@ async def extract_playlist_info_with_fallback(
 
 
 # =============================================================================
-# PLAYLIST PROCESSING
+# playlist processing
 # =============================================================================
 
 def process_playlist_entries(entries: List[dict], include_formats: bool = False) -> List[PlaylistVideoInfo]:
@@ -416,7 +402,6 @@ def process_playlist_entries(entries: List[dict], include_formats: bool = False)
             thumbnail = entry.get('thumbnail')
             uploader = entry.get('uploader', entry.get('channel', 'Unknown'))
             
-            # Construct video URL
             video_url = f"https://www.youtube.com/watch?v={video_id}"
             
             video_formats = []
@@ -447,12 +432,11 @@ def process_playlist_entries(entries: List[dict], include_formats: bool = False)
 
 
 # =============================================================================
-# YOUTUBE SERVICE CLASS
+# youtube service
 # =============================================================================
 
 class YouTubeService:
-    """Main service class that encapsulates all YouTube operations."""
-    
+
     def __init__(self, ffmpeg_path: Optional[str], deno_path: Optional[str], cookie_manager: CookieManager):
         self.ffmpeg_path = ffmpeg_path
         self.deno_path = deno_path
@@ -461,7 +445,6 @@ class YouTubeService:
         self.active_downloads = {}
 
     def _track_download(self, download_id: str, download_type: str, url: str):
-        """Internal helper to track an active download."""
         self.active_downloads[download_id] = {
             "type": download_type,
             "url": url,
@@ -469,15 +452,12 @@ class YouTubeService:
         }
 
     def _untrack_download(self, download_id: str):
-        """Internal helper to remove a completed/failed download from tracking."""
         self.active_downloads.pop(download_id, None)
 
     def get_active_downloads_count(self) -> int:
-        """Expose the number of active downloads."""
         return len(self.active_downloads)
 
     async def get_video_info(self, request: VideoInfoRequest, download_dir: Path) -> VideoInfoResponse:
-        """Get video information with format details."""
         try:
             info = await extract_video_info_with_fallback(request.url, self.ffmpeg_path, self.deno_path)
             video_formats, audio_formats = extract_formats(info.get('formats', []), request.url)
@@ -496,7 +476,6 @@ class YouTubeService:
             raise HTTPException(status_code=400, detail=f"Failed to get video info: {str(e)}")
 
     async def download_combined(self, request: CombinedDownloadRequest, download_dir: Path) -> dict:
-        """Download and merge video+audio with optional time range."""
         download_id = str(uuid.uuid4())
         self._track_download(download_id, "combined", request.url)
         try:
@@ -529,30 +508,23 @@ class YouTubeService:
             
             await download_with_fallback(request.url, base_opts, self.ffmpeg_path, self.deno_path)
             
-            # More robust file detection - check for files with the expected base name
             base_name = final_filename.replace('.%(ext)s', '')
             possible_files = []
             
-            # Look for files with the exact base name and common extensions
             for ext in ['mp4', 'm4a', 'webm', 'mkv', 'mov', 'avi']:
-                pattern = f"{base_name}.{ext}"
-                matches = list(download_dir.glob(pattern))
-                possible_files.extend(matches)
+                possible_files.extend(list(download_dir.glob(f"{base_name}.{ext}")))
             
-            # If no exact matches, fall back to generic search (most recent file)
+            # fallback: grab most recent file
             if not possible_files:
                 all_files = list(download_dir.glob("*.mp4")) + list(download_dir.glob("*.m4a")) + list(download_dir.glob("*.webm")) + list(download_dir.glob("*.mkv"))
                 if all_files:
-                    # Get the most recently created file
                     possible_files = [max(all_files, key=lambda x: x.stat().st_mtime)]
             
             if not possible_files:
                 raise HTTPException(status_code=500, detail="Download failed - no files found in directory")
             
-            # Use the most recent file if multiple matches
             actual_file = max(possible_files, key=lambda x: x.stat().st_mtime)
             
-            # ensure file is completely written before getting size
             try:
                 actual_file_size = actual_file.stat().st_size
                 if actual_file_size == 0:
@@ -576,14 +548,12 @@ class YouTubeService:
             self._untrack_download(download_id)
 
     async def download_audio(self, request: AudioDownloadRequest, download_dir: Path) -> dict:
-        """Download audio-only with optional time range."""
         download_id = str(uuid.uuid4())
         self._track_download(download_id, "audio", request.url)
         try:
             info = await extract_video_info_with_fallback(request.url, self.ffmpeg_path, self.deno_path)
             title = sanitize_filename(info.get('title', 'audio'))
             
-            # Create unique filename including quality info
             quality = request.format_id.replace('_audio', '').replace('auto_audio', 'auto').replace('high_audio', 'high').replace('medium_audio', 'medium')
             timestamp = int(time.time() * 1000) % 100000
             
@@ -596,7 +566,6 @@ class YouTubeService:
             
             final_path = download_dir / final_filename
             
-            # Use yt-dlp audio format selector
             format_string = get_audio_format_selector(request.format_id)
             base_opts = {
                 'format': format_string,
@@ -607,30 +576,23 @@ class YouTubeService:
             
             await download_with_fallback(request.url, base_opts, self.ffmpeg_path, self.deno_path)
             
-            # More robust file detection - check for files with the expected base name
             base_name = final_filename.replace('.%(ext)s', '')
             possible_files = []
             
-            # Look for files with the exact base name and common extensions
             for ext in ['m4a', 'mp3', 'webm', 'ogg', 'wav', 'aac']:
-                pattern = f"{base_name}.{ext}"
-                matches = list(download_dir.glob(pattern))
-                possible_files.extend(matches)
+                possible_files.extend(list(download_dir.glob(f"{base_name}.{ext}")))
             
-            # If no exact matches, fall back to generic search (most recent file)
+            # fallback: grab most recent file
             if not possible_files:
                 all_files = list(download_dir.glob("*.m4a")) + list(download_dir.glob("*.mp3")) + list(download_dir.glob("*.webm")) + list(download_dir.glob("*.ogg"))
                 if all_files:
-                    # Get the most recently created file
                     possible_files = [max(all_files, key=lambda x: x.stat().st_mtime)]
             
             if not possible_files:
                 raise HTTPException(status_code=500, detail="Download failed - no audio files found in directory")
             
-            # Use the most recent file if multiple matches
             actual_file = max(possible_files, key=lambda x: x.stat().st_mtime)
             
-            # ensure file is completely written before getting size
             try:
                 actual_file_size = actual_file.stat().st_size
                 if actual_file_size == 0:
@@ -654,9 +616,7 @@ class YouTubeService:
             self._untrack_download(download_id)
 
     async def get_playlist_info(self, request: PlaylistInfoRequest, download_dir: Path) -> PlaylistInfoResponse:
-        """Get playlist information with video list."""
         try:
-            # Extract playlist info
             info = await extract_playlist_info_with_fallback(
                 request.url, 
                 request.max_videos, 
@@ -666,14 +626,12 @@ class YouTubeService:
                 self.cookie_manager
             )
             
-            # Get playlist metadata
             playlist_title = info.get('title', 'Unknown Playlist')
             playlist_id = info.get('id', '')
             uploader = info.get('uploader', info.get('channel', 'Unknown'))
             total_videos = info.get('playlist_count', 0)
             entries = info.get('entries', [])
             
-            # Process video entries
             videos = process_playlist_entries(entries, request.include_formats)
             
             return PlaylistInfoResponse(
@@ -691,13 +649,11 @@ class YouTubeService:
             raise HTTPException(status_code=400, detail=f"Failed to get playlist info: {str(e)}")
 
     async def download_playlist(self, request: PlaylistDownloadRequest, download_dir: Path, background_tasks: BackgroundTasks) -> FileResponse:
-        """Download selected videos from playlist."""
         download_id = str(uuid.uuid4())
         self._track_download(download_id, "playlist", request.url)
         batch_dir = download_dir / f"playlist_{download_id}"
         
         try:
-            # First, get playlist info to validate selected videos
             playlist_info = await extract_playlist_info_with_fallback(
                 request.url, 
                 max_videos=100,
@@ -747,7 +703,6 @@ class YouTubeService:
                         'restrictfilenames': True,
                     }
                     
-                    # Only add format if not using yt-dlp default (auto)
                     if format_string is not None:
                         base_opts['format'] = format_string
                     

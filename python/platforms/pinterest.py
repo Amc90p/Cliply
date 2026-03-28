@@ -1,14 +1,4 @@
-"""
-Pinterest platform service module.
-
-This module encapsulates all Pinterest-specific functionality including:
-- Video pin information extraction
-- Video/audio downloads
-- Image vs video detection (critical for Pinterest)
-
-Note: Pinterest is simpler than YouTube - no playlists, no authentication required.
-Format selection is fully delegated to yt-dlp.
-"""
+"""pinterest download service."""
 
 import os
 import re
@@ -30,7 +20,7 @@ from shared_utils import (
 
 
 # =============================================================================
-# PYDANTIC MODELS
+# pydantic models
 # =============================================================================
 
 class PinterestVideoInfoRequest(BaseModel):
@@ -39,7 +29,6 @@ class PinterestVideoInfoRequest(BaseModel):
     @field_validator('url')
     @classmethod
     def validate_pinterest_url(cls, v):
-        # Support both full URLs and short URLs
         pinterest_patterns = [
             r'https?://(?:www\.)?pinterest\.com/pin/[\w-]+',
             r'https?://pin\.it/[\w-]+'
@@ -63,7 +52,7 @@ class PinterestDownloadRequest(BaseModel):
 
 
 # =============================================================================
-# ASYNC WRAPPERS
+# async wrappers
 # =============================================================================
 
 def _extract_info_blocking(url: str, opts: dict) -> dict:
@@ -87,19 +76,14 @@ async def download_async(url: str, opts: dict) -> None:
 
 
 # =============================================================================
-# HELPER FUNCTIONS
+# helper functions
 # =============================================================================
 
 def is_video_pin(info: dict) -> bool:
-    """
-    CRITICAL FUNCTION - Check if pin contains video vs image.
-    Pinterest has many image pins, and we need to detect video pins specifically.
-    """
+    """true if the url points to a video, not an image."""
     formats = info.get('formats', [])
     if not formats:
         return False
-    
-    # Check if any format has video codec
     return any(
         f.get('vcodec') and f.get('vcodec') != 'none'
         for f in formats
@@ -107,7 +91,6 @@ def is_video_pin(info: dict) -> bool:
 
 
 def get_enhanced_ydl_opts(base_opts: dict = None, ffmpeg_path: Optional[str] = None, deno_path: Optional[str] = None) -> dict:
-    """Get enhanced yt-dlp options with FFmpeg and Deno paths."""
     if base_opts is None:
         base_opts = {}
     
@@ -119,11 +102,10 @@ def get_enhanced_ydl_opts(base_opts: dict = None, ffmpeg_path: Optional[str] = N
         'fragment_retries': 2,
     }
     
-    # Add FFmpeg location if available
     if ffmpeg_path:
         simple_opts['ffmpeg_location'] = ffmpeg_path
     
-    # Add Deno runtime for JavaScript execution (required for yt-dlp 2025.11.12+)
+    # deno required for yt-dlp 2025.11.12+
     if deno_path:
         simple_opts['js_runtimes'] = {'deno': {'path': deno_path}}
     
@@ -131,23 +113,19 @@ def get_enhanced_ydl_opts(base_opts: dict = None, ffmpeg_path: Optional[str] = N
     return simple_opts
 
 
-
-
 # =============================================================================
-# PINTEREST SERVICE CLASS
+# pinterest service
 # =============================================================================
 
 class PinterestService:
-    """Main service class that encapsulates all Pinterest operations."""
     
     def __init__(self, ffmpeg_path: Optional[str], deno_path: Optional[str]):
         self.ffmpeg_path = ffmpeg_path
         self.deno_path = deno_path
         self.active_downloads = {}
-        # Note: No cookie manager needed for Pinterest
+        # no cookies needed for pinterest
 
     def _track_download(self, download_id: str, url: str):
-        """Internal helper to track an active download."""
         self.active_downloads[download_id] = {
             "type": "video",
             "url": url,
@@ -155,22 +133,17 @@ class PinterestService:
         }
 
     def _untrack_download(self, download_id: str):
-        """Internal helper to remove a completed/failed download from tracking."""
         self.active_downloads.pop(download_id, None)
 
     def get_active_downloads_count(self) -> int:
-        """Expose the number of active downloads."""
         return len(self.active_downloads)
 
     async def get_video_info(self, request: PinterestVideoInfoRequest, download_dir: Path) -> PinterestVideoInfoResponse:
-        """Get Pinterest video information. Format selection is handled by yt-dlp during download."""
         try:
-            base_opts = {}
-            opts = get_enhanced_ydl_opts(base_opts, self.ffmpeg_path, self.deno_path)
-            
+            opts = get_enhanced_ydl_opts({}, self.ffmpeg_path, self.deno_path)
             info = await extract_info_async(request.url, opts)
             
-            # Critical check: Is this a video pin or an image pin?
+            # reject image pins early — pinterest mixes images and videos
             if not is_video_pin(info):
                 raise HTTPException(
                     status_code=400,
@@ -190,35 +163,20 @@ class PinterestService:
             raise
         except Exception as e:
             error_msg = str(e)
-            
-            # Handle 404 errors
             if "404" in error_msg or "Not Found" in error_msg:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Pinterest pin not found, is private, or has been deleted"
-                )
-            
-            # Handle 403 errors
+                raise HTTPException(status_code=400, detail="Pinterest video not found, is private, or has been deleted")
             if "403" in error_msg or "Forbidden" in error_msg:
-                raise HTTPException(
-                    status_code=503,
-                    detail="Pinterest is blocking automated requests. Please try again later."
-                )
-            
+                raise HTTPException(status_code=503, detail="Pinterest is blocking automated requests. Please try again later.")
             raise HTTPException(status_code=400, detail=f"Failed to extract Pinterest video: {error_msg}")
 
     async def download_video(self, request: PinterestDownloadRequest, download_dir: Path) -> dict:
-        """Download Pinterest video. Accepts optional format_id to override yt-dlp's default selection."""
         download_id = str(uuid.uuid4())
         self._track_download(download_id, request.url)
         
         try:
-            # Extract video info to get title
-            base_opts = {}
-            opts = get_enhanced_ydl_opts(base_opts, self.ffmpeg_path, self.deno_path)
+            opts = get_enhanced_ydl_opts({}, self.ffmpeg_path, self.deno_path)
             info = await extract_info_async(request.url, opts)
             
-            # Critical check: Is this a video pin?
             if not is_video_pin(info):
                 raise HTTPException(
                     status_code=400,
@@ -228,7 +186,6 @@ class PinterestService:
             title = sanitize_filename(info.get('title', 'pinterest_video'))
             timestamp = int(time.time() * 1000) % 100000
             
-            # Use format_id if provided, otherwise let yt-dlp choose best video+audio
             format_selector = request.format_id if request.format_id else 'bestvideo+bestaudio/best'
             final_filename = f"{title}_pinterest_{timestamp}.%(ext)s"
             base_opts = {
@@ -240,19 +197,14 @@ class PinterestService:
             download_opts = get_enhanced_ydl_opts(base_opts, self.ffmpeg_path, self.deno_path)
             await download_async(request.url, download_opts)
             
-            # Find the downloaded file
             base_name = final_filename.replace('.%(ext)s', '')
+            extensions = ['mp4', 'webm', 'mkv', 'mov']
             possible_files = []
             
-            # Check for common video extensions
-            extensions = ['mp4', 'webm', 'mkv', 'mov']
-            
             for ext in extensions:
-                pattern = f"{base_name}.{ext}"
-                matches = list(download_dir.glob(pattern))
-                possible_files.extend(matches)
+                possible_files.extend(list(download_dir.glob(f"{base_name}.{ext}")))
             
-            # Fallback: find most recent file
+            # fallback: grab most recent file
             if not possible_files:
                 all_files = []
                 for ext in extensions:
@@ -265,7 +217,6 @@ class PinterestService:
             
             actual_file = max(possible_files, key=lambda x: x.stat().st_mtime)
             
-            # Verify file exists and is not empty
             try:
                 actual_file_size = actual_file.stat().st_size
                 if actual_file_size == 0:
@@ -285,21 +236,10 @@ class PinterestService:
             raise
         except Exception as e:
             error_msg = str(e)
-            
-            # Handle 404 errors
             if "404" in error_msg or "Not Found" in error_msg:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Pinterest pin not found, is private, or has been deleted"
-                )
-            
-            # Handle 403 errors
+                raise HTTPException(status_code=400, detail="Pinterest video not found, is private, or has been deleted")
             if "403" in error_msg or "Forbidden" in error_msg:
-                raise HTTPException(
-                    status_code=503,
-                    detail="Pinterest is blocking automated requests. Please try again later."
-                )
-            
+                raise HTTPException(status_code=503, detail="Pinterest is blocking automated requests. Please try again later.")
             raise HTTPException(status_code=500, detail=f"Pinterest download failed: {error_msg}")
         finally:
             self._untrack_download(download_id)

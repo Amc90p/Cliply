@@ -1,0 +1,107 @@
+import { zodResolver } from "@hookform/resolvers/zod"
+import type { Resolver } from "react-hook-form"
+
+import { pinterestApi, videoApi } from "@/lib/api"
+import { usePinterestStore } from "@/lib/pinterestStore"
+import type { Platform } from "@/lib/store"
+import { pinterestUrlSchema, youtubeUrlSchema } from "@/lib/validation"
+import { useYouTubeStore } from "@/lib/youtubeStore"
+
+interface PlatformStoreAccessor {
+  getUrl: () => string
+  setUrl: (url: string) => void
+  isLoading: () => boolean
+  setIsLoading: (loading: boolean) => void
+  hasInfo: () => boolean
+  reset: () => void
+}
+
+export interface PlatformConfig {
+  id: Platform
+  label: string
+  logo: string
+  formResolver: Resolver<{ url: string }>
+  placeholder: string
+  helperText: string
+  loadingText: string
+  successMessage: string
+  errorMessages: {
+    invalidUrl: string
+    invalidUrlToast: string
+    unavailable: string
+    genericFail: string
+    logPrefix: string
+  }
+  fetchAndStore: (url: string) => Promise<void>
+  store: PlatformStoreAccessor
+}
+
+export const PLATFORM_REGISTRY: Record<Platform, PlatformConfig> = {
+  youtube: {
+    id: "youtube",
+    label: "youtube",
+    logo: "/youtube-logo.svg",
+    formResolver: zodResolver(youtubeUrlSchema),
+    placeholder: "paste video url here...",
+    helperText:
+      "supports youtube videos & shorts from youtube.com and youtu.be",
+    loadingText: "\u{1F40B} getting video information",
+    successMessage: "Video information loaded successfully!",
+    errorMessages: {
+      invalidUrl: "Invalid YouTube URL",
+      invalidUrlToast: "Please enter a valid YouTube URL",
+      unavailable: "This video is not available for download",
+      genericFail: "Failed to get video information",
+      logPrefix: "Video info request failed:"
+    },
+    fetchAndStore: async (url: string) => {
+      const info = await videoApi.getVideoInfo(url)
+      useYouTubeStore.getState().setVideoInfo(info)
+    },
+    store: {
+      getUrl: () => useYouTubeStore.getState().url,
+      setUrl: (url) => useYouTubeStore.getState().setUrl(url),
+      isLoading: () => useYouTubeStore.getState().isLoadingVideoInfo,
+      setIsLoading: (loading) =>
+        useYouTubeStore.getState().setIsLoadingVideoInfo(loading),
+      hasInfo: () => useYouTubeStore.getState().videoInfo !== null,
+      reset: () => useYouTubeStore.getState().reset()
+    }
+  },
+  pinterest: {
+    id: "pinterest",
+    label: "pinterest",
+    logo: "/pinterest-logo.svg",
+    formResolver: zodResolver(pinterestUrlSchema),
+    placeholder: "paste video url here...",
+    helperText: "supports pinterest videos from pin.it urls",
+    loadingText: "\u{1F40B} getting video information",
+    successMessage: "Video information loaded successfully!",
+    errorMessages: {
+      invalidUrl: "Invalid Pinterest URL",
+      invalidUrlToast: "Please enter a valid Pinterest URL",
+      unavailable: "This video is not available for download",
+      genericFail: "Failed to get video information",
+      logPrefix: "Pinterest info request failed:"
+    },
+    fetchAndStore: async (url: string) => {
+      const info = await pinterestApi.getInfo(url)
+      usePinterestStore.getState().setPinInfo(info)
+    },
+    store: {
+      getUrl: () => usePinterestStore.getState().url,
+      setUrl: (url) => usePinterestStore.getState().setUrl(url),
+      isLoading: () => usePinterestStore.getState().isLoadingPinInfo,
+      setIsLoading: (loading) =>
+        usePinterestStore.getState().setIsLoadingPinInfo(loading),
+      hasInfo: () => usePinterestStore.getState().pinInfo !== null,
+      reset: () => usePinterestStore.getState().reset()
+    }
+  }
+}
+
+export const PLATFORM_LIST = Object.values(PLATFORM_REGISTRY).map((p) => ({
+  id: p.id,
+  label: p.label,
+  logo: p.logo
+}))

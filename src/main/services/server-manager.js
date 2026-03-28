@@ -397,7 +397,12 @@ class ServerManager {
         clearTimeout(timeoutId)
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          let detail = response.statusText
+          try {
+            const body = await response.json()
+            detail = body.detail || body.message || body.error || detail
+          } catch {}
+          throw new Error(detail)
         }
 
         return response

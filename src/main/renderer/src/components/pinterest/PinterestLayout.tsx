@@ -1,5 +1,5 @@
 import { ModeToggle } from "@/components/ui/mode-toggle"
-import { UnifiedDownloadCard } from "@/components/video"
+import { FeedbackCard, UnifiedDownloadCard } from "@/components/video"
 import { useServerStatus } from "@/lib/hooks/useServerStatus"
 import { usePinterestStore } from "@/lib/pinterestStore"
 import { useAppStore } from "@/lib/store"
@@ -114,7 +114,6 @@ export function PinterestLayout() {
             transition={{ duration: 0.5 }}
             className="flex-1 flex flex-col space-y-3 lg:space-y-4 xl:overflow-y-auto xl:h-full"
           >
-            {/* Download Info */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -125,26 +124,20 @@ export function PinterestLayout() {
                 Downloads stored at{" "}
                 <span className="font-mono text-slate-600 dark:text-slate-300">
                   ~/Downloads/Cliply
-                </span>{" "}
-                &nbsp;•&nbsp; Multiple downloads supported, performance may vary
-                with concurrent downlaods.
+                </span>
               </div>
             </motion.div>
 
-            {/* Pin Details Card */}
             <div className="flex-shrink-0">
               <PinterestDetailsCard pinInfo={pinInfo} />
             </div>
 
-            {/* Pin Thumbnail */}
             <div className="flex-1 min-h-[250px] sm:min-h-[300px] lg:min-h-[350px]">
-              <div className="h-full w-full">
-                <PinterestThumbnail
-                  thumbnailUrl={pinInfo.thumbnail}
-                  pinUrl={url}
-                  title={pinInfo.title}
-                />
-              </div>
+              <PinterestThumbnail
+                thumbnailUrl={pinInfo.thumbnail}
+                pinUrl={url}
+                title={pinInfo.title}
+              />
             </div>
           </motion.div>
         </div>
@@ -153,6 +146,7 @@ export function PinterestLayout() {
         <div className="w-full xl:w-1/3 border-t xl:border-t-0 xl:border-l border-slate-200/50 dark:border-slate-700/50 flex flex-col xl:overflow-hidden">
           <div className="flex-1 xl:overflow-y-auto">
             <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+              <FeedbackCard />
               <UnifiedDownloadCard platform="pinterest" pinInfo={pinInfo} />
             </div>
           </div>

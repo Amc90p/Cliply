@@ -39,7 +39,7 @@ export function PinterestThumbnail({
         className
       )}
     >
-      <div className="relative overflow-hidden rounded-xl aspect-[4/5] bg-slate-100/60 dark:bg-slate-900/40">
+      <div className="relative overflow-hidden rounded-xl aspect-video min-h-[320px] bg-slate-100/60 dark:bg-slate-900/40">
         {thumbnailUrl ? (
           <img
             src={thumbnailUrl}
@@ -61,8 +61,8 @@ export function PinterestThumbnail({
           className={cn(
             "absolute left-3 right-3 bottom-3 inline-flex items-center justify-center gap-2",
             "rounded-lg px-3 py-2 text-xs font-medium transition-all duration-200",
-            "bg-slate-900/90 text-white hover:bg-slate-900",
-            "dark:bg-white/90 dark:text-slate-900 dark:hover:bg-white"
+            "bg-white/80 text-slate-800 hover:bg-white/95 border border-slate-200/50 shadow-sm",
+            "dark:bg-white/90 dark:text-slate-900 dark:hover:bg-white dark:border-transparent"
           )}
         >
           <ExternalLink className="h-4 w-4" />

@@ -136,15 +136,16 @@ def sanitize_filename(filename: str) -> str:
     filename = re.sub(r'\s+', ' ', filename).strip()
     return filename[:200] if len(filename) > 200 else filename
 
-def format_duration(seconds: int) -> str:
+def format_duration(seconds) -> str:
     if not seconds:
         return "00:00"
+    seconds = int(seconds)
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60
-    seconds = seconds % 60
+    secs = seconds % 60
     if hours > 0:
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-    return f"{minutes:02d}:{seconds:02d}"
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 def seconds_to_time_string(seconds: float) -> str:
     hours = int(seconds // 3600)

@@ -198,7 +198,7 @@ class IPCHandlers {
     try {
       this.validateRequest(data, ["url"])
       const { url, platform } = data
-      const targetPlatform = String(platform).toLowerCase() ?? "youtube"
+      const targetPlatform = platform ? String(platform).toLowerCase() : "youtube"
 
       if (!this.serverManager.isServerReady()) {
         return this.createError(
@@ -229,9 +229,9 @@ class IPCHandlers {
 
       return this.createSuccess(videoInfo)
     } catch (error) {
-      console.error("Video info extraction failed:", error.message)
+      console.error("Info extraction failed:", error.message)
       return this.createError(
-        "Failed to get video information",
+        error.message || "Failed to get media information",
         "Please check the URL and try again"
       )
     }
@@ -334,8 +334,9 @@ class IPCHandlers {
               : title
             const eventData = {
               type: "combined",
+              platform: targetPlatform,
               video_title: sanitizeTitle(actualTitle),
-              format_quality: extractQuality(videoFormatId),
+              format_quality: extractQuality(video_format_id),
               file_size_mb: Math.round((result.file_size || 0) / (1024 * 1024))
             }
             getTrackEvent()(
@@ -376,6 +377,7 @@ class IPCHandlers {
         const eventData = {
           error_type: categorizeError(error.message),
           type: "combined",
+          platform: data?.platform ? String(data.platform).toLowerCase() : "youtube",
           video_title: sanitizeTitle(title),
           format_quality: extractQuality(video_format_id)
         }

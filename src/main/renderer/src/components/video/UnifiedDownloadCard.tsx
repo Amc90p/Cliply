@@ -1,11 +1,9 @@
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  downloadApi,
   pinterestApi,
   systemApi,
   validateTimeRange,
-  type DownloadProgress,
   type PinterestVideoInfoResponse,
   type VideoFormat
 } from "@/lib/api"
@@ -18,7 +16,7 @@ import {
 } from "@/lib/toast-utils"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { toast } from "sonner"
 import { AudioDownloadButton } from "./AudioDownloadButton"
 import { AudioFormatDropdown } from "./AudioFormatDropdown"
@@ -186,20 +184,6 @@ function YouTubeDownloadCard({
   )
 }
 
-type PinterestDownloadState = {
-  status:
-    | "idle"
-    | "starting"
-    | "downloading"
-    | "completed"
-    | "failed"
-    | "cancelled"
-  progress: number
-  message?: string
-  filename?: string
-  error?: string
-}
-
 function PinterestDownloadCard({
   pinInfo,
   className
@@ -209,30 +193,9 @@ function PinterestDownloadCard({
 }) {
   const { url, isDownloading, setIsDownloading } = usePinterestStore()
   const serverStatus = useServerStatus()
-  const progressCleanupRef = useRef<(() => void) | null>(null)
-  const [downloadState, setDownloadState] = useState<PinterestDownloadState>({
-    status: "idle",
-    progress: 0
-  })
-
-  useEffect(() => {
-    return () => {
-      if (progressCleanupRef.current) {
-        progressCleanupRef.current()
-        progressCleanupRef.current = null
-      }
-    }
-  }, [])
 
   const handleDownload = async () => {
-    if (!url) {
-      toast.error("Missing Pinterest URL")
-      return
-    }
-
-    if (isDownloading || downloadState.status === "starting") {
-      return
-    }
+    if (!url || isDownloading) return
 
     if (serverStatus.isStarting) {
       showServerStartingToast()
@@ -248,71 +211,16 @@ function PinterestDownloadCard({
 
     try {
       setIsDownloading(true)
-      setDownloadState({
-        status: "starting",
-        progress: 0,
-        message: "Starting download..."
-      })
-
-      const { downloadId } = await pinterestApi.download({ url })
-
-      const cleanup = downloadApi.onProgress((progress: DownloadProgress) => {
-        if (progress.downloadId !== downloadId) return
-
-        setDownloadState((prev) => ({
-          ...prev,
-          status: progress.status as PinterestDownloadState["status"],
-          progress: progress.progress || prev.progress,
-          message:
-            progress.error ||
-            `Downloading pin... ${(progress.progress || 0).toFixed(1)}%`,
-          filename: progress.filename,
-          error: progress.error
-        }))
-
-        if (progress.status === "completed") {
-          toast.success("Pinterest download completed!", {
-            description: progress.filename
-              ? `Saved: ${progress.filename}`
-              : undefined,
-            action: {
-              label: "Open Folder",
-              onClick: () => systemApi.openDownloadFolder()
-            }
-          })
-          setIsDownloading(false)
-          if (progressCleanupRef.current) {
-            progressCleanupRef.current()
-            progressCleanupRef.current = null
-          }
-        }
-
-        if (progress.status === "failed") {
-          toast.error("Pinterest download failed", {
-            description: progress.error || "Unknown error occurred"
-          })
-          setIsDownloading(false)
-          if (progressCleanupRef.current) {
-            progressCleanupRef.current()
-            progressCleanupRef.current = null
-          }
-        }
-
-        if (progress.status === "cancelled") {
-          toast.info("Pinterest download cancelled")
-          setIsDownloading(false)
-          if (progressCleanupRef.current) {
-            progressCleanupRef.current()
-            progressCleanupRef.current = null
-          }
+      await pinterestApi.download({ url })
+      toast.success("Download complete!", {
+        action: {
+          label: "Open Folder",
+          onClick: () => systemApi.openDownloadFolder()
         }
       })
-
-      progressCleanupRef.current = cleanup
     } catch (error) {
-      console.error("Pinterest download error:", error)
       const message =
-        error instanceof Error ? error.message : "Failed to download pin"
+        error instanceof Error ? error.message : "Failed to download video"
       if (message.includes("Download engine starting")) {
         showServerStartingToast()
       } else if (message.includes("network") || message.includes("fetch")) {
@@ -320,19 +228,10 @@ function PinterestDownloadCard({
       } else {
         toast.error("Download failed", { description: message })
       }
-      setDownloadState({
-        status: "failed",
-        progress: 0,
-        error: message
-      })
+    } finally {
       setIsDownloading(false)
     }
   }
-
-  const isBusy =
-    isDownloading ||
-    downloadState.status === "starting" ||
-    downloadState.status === "downloading"
 
   return (
     <motion.div
@@ -343,8 +242,7 @@ function PinterestDownloadCard({
         "rounded-2xl border-2 transition-all duration-200",
         "dark:bg-slate-800/40 dark:border-slate-700/50 dark:backdrop-blur-sm",
         "bg-white/60 border-slate-300/50 backdrop-blur-sm",
-        "shadow-xl",
-        "font-space-grotesk",
+        "shadow-xl font-space-grotesk",
         className
       )}
     >
@@ -354,7 +252,7 @@ function PinterestDownloadCard({
             Download Pinterest Video
           </h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Download the pin directly without format selection.
+            Best available quality, saved as MP4.
           </p>
         </div>
 
@@ -368,30 +266,15 @@ function PinterestDownloadCard({
 
         <Button
           onClick={handleDownload}
-          disabled={isBusy}
+          disabled={isDownloading}
           className={cn(
-            "w-full h-14 text-lg font-semibold rounded-xl transition-all duration-200",
+            "w-full h-12 text-base font-semibold rounded-xl transition-all duration-200",
             "bg-cyan-600 hover:bg-cyan-700 text-white border-2 border-cyan-600 hover:border-cyan-700",
             "disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
           )}
         >
-          {isBusy ? "Downloading..." : "Download Pin"}
+          {isDownloading ? "Downloading..." : "Download Video"}
         </Button>
-
-        {downloadState.status !== "idle" && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-              <span>{downloadState.message || "Preparing download..."}</span>
-              <span>{downloadState.progress.toFixed(1)}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-slate-200/70 dark:bg-slate-700/60">
-              <div
-                className="h-1.5 rounded-full bg-cyan-500 transition-all duration-200"
-                style={{ width: `${downloadState.progress}%` }}
-              />
-            </div>
-          </div>
-        )}
       </div>
     </motion.div>
   )
