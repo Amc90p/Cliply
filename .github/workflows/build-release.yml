@@ -1,0 +1,181 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.2.5). If set, checkout uses this ref; must exist on the remote.'
+        required: false
+
+# One release at a time — avoids two runs deleting/recreating the same GitHub Release
+concurrency:
+  group: cliply-build-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    outputs:
+      app_version: ${{ steps.versions.outputs.app_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Download FFmpeg for macOS
+        run: |
+          mkdir -p binaries/macos
+          curl -fL --retry 3 --retry-delay 2 -o binaries/macos/ffmpeg \
+            "https://github.com/${{ github.repository }}/releases/download/binaries/ffmpeg"
+          chmod +x binaries/macos/ffmpeg
+
+      - name: Download Deno for macOS
+        run: |
+          mkdir -p binaries/deno/macos
+          curl -fL --retry 3 --retry-delay 2 -o binaries/deno/macos/deno \
+            "https://github.com/${{ github.repository }}/releases/download/binaries/deno"
+          chmod +x binaries/deno/macos/deno
+
+      - run: npm ci
+      - run: npm run install:renderer
+      - run: npm run build:renderer
+      - run: npm run setup:python-runtime
+
+      - name: Capture versions
+        id: versions
+        run: |
+          PYTHON_EXE="python-runtime/darwin-arm64/bin/python3"
+          $PYTHON_EXE -c "import fastapi; print(f'fastapi {fastapi.__version__}')"
+          $PYTHON_EXE -c "import yt_dlp; print(f'yt-dlp {yt_dlp.version.__version__}')"
+          $PYTHON_EXE -c "import uvicorn; print('uvicorn OK')"
+          echo "app_version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - run: npx electron-builder --mac --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cliply-macos
+          path: |
+            dist/*.dmg
+            dist/latest-mac.yml
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Download FFmpeg for Windows
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "binaries/windows"
+          Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/binaries/ffmpeg.exe" -OutFile "binaries/windows/ffmpeg.exe"
+
+      - name: Download Deno for Windows
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "binaries/deno/windows"
+          Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/binaries/deno.exe" -OutFile "binaries/deno/windows/deno.exe"
+
+      - run: npm ci
+      - run: npm run install:renderer
+      - run: npm run build:renderer
+      - name: Setup Python runtime
+        shell: pwsh
+        run: npm run setup:python-runtime
+
+      - name: Verify Python dependencies
+        shell: pwsh
+        run: |
+          $p = "python-runtime/win32-x64/python.exe"
+          & $p -c "import fastapi; print(f'fastapi {fastapi.__version__}')"
+          & $p -c "import yt_dlp; print(f'yt-dlp {yt_dlp.version.__version__}')"
+          & $p -c "import uvicorn; print('uvicorn OK')"
+
+      - run: npx electron-builder --win --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cliply-windows
+          path: |
+            dist/*Setup*.exe
+            dist/latest.yml
+          retention-days: 30
+
+  create-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' && inputs.tag || github.ref }}
+
+      - name: Determine tag
+        id: info
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG="${{ github.ref_name }}"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v$(node -p "require('./package.json').version")"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cliply-macos
+          path: artifacts/macos
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cliply-windows
+          path: artifacts/windows
+
+      - name: List downloaded artifacts
+        run: find artifacts -type f
+
+      - name: Create GitHub Release
+        run: |
+          TAG="${{ steps.info.outputs.tag }}"
+
+          FILES=()
+          while IFS= read -r f; do
+            FILES+=("$f")
+          done < <(find artifacts -type f \( -name "*.dmg" -o -name "*Setup*.exe" -o -name "latest*.yml" \))
+
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::error::No release files found in artifacts"
+            exit 1
+          fi
+
+          echo "Attaching ${#FILES[@]} files:"
+          printf '  %s\n' "${FILES[@]}"
+
+          gh release delete "$TAG" --yes 2>/dev/null || true
+
+          gh release create "$TAG" \
+            --title "Cliply ${{ needs.build-macos.outputs.app_version }}" \
+            --notes-file .github/RELEASE_NOTES.md \
+            --latest \
+            "${FILES[@]}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
