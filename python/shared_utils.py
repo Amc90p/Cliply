@@ -105,29 +105,25 @@ def detect_ffmpeg_path():
         potential_paths.append(script_dir.parent / "binaries" / "linux" / "ffmpeg")
     
     for path in potential_paths:
-        if path.exists() and path.is_file():
-            import stat
-            if path.stat().st_mode & stat.S_IXUSR:
-                return str(path)
+        if path.exists() and path.is_file() and os.access(str(path), os.X_OK):
+            return str(path)
     return None
 
 def detect_deno_path():
     """Detect Deno binary path for yt-dlp JavaScript runtime support"""
     script_dir = Path(__file__).parent.absolute()
     potential_paths = []
-    
+
     if platform.system() == "Darwin":
         potential_paths.append(script_dir.parent / "binaries" / "deno" / "macos" / "deno")
     elif platform.system() == "Windows":
         potential_paths.append(script_dir.parent / "binaries" / "deno" / "windows" / "deno.exe")
     elif platform.system() == "Linux":
         potential_paths.append(script_dir.parent / "binaries" / "deno" / "linux" / "deno")
-    
+
     for path in potential_paths:
-        if path.exists() and path.is_file():
-            import stat
-            if path.stat().st_mode & stat.S_IXUSR:
-                return str(path)
+        if path.exists() and path.is_file() and os.access(str(path), os.X_OK):
+            return str(path)
     return None
 
 def sanitize_filename(filename: str) -> str:
