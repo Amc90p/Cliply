@@ -19,7 +19,7 @@ function categorizeError(errorMessage) {
   if (
     message.includes("bot") ||
     message.includes("rate") ||
-    message.includes("blocked")
+    message.includes("block")
   ) {
     return "BOT_DETECTION"
   }
@@ -62,7 +62,11 @@ function extractQuality(formatId) {
     // audio format selectors
     auto_audio: "auto_audio",
     high_audio: "high_quality",
-    medium_audio: "medium_quality"
+    medium_audio: "medium_quality",
+
+    // platforms that always use best available (no user format selection)
+    pinterest: "best_available",
+    tiktok: "best_available"
   }
 
   if (newFormatMappings[id]) {

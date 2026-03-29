@@ -197,7 +197,8 @@ class IPCHandlers {
   async handleGetVideoInfo(event, data) {
     try {
       this.validateRequest(data, ["url"])
-      const { url } = data
+      const { url, platform } = data
+      const targetPlatform = platform ? String(platform).toLowerCase() : "youtube"
 
       if (!this.serverManager.isServerReady()) {
         return this.createError(
@@ -207,8 +208,19 @@ class IPCHandlers {
         )
       }
 
+      let endpoint = null
+      if (targetPlatform === "youtube") {
+        endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.VIDEO_INFO
+      } else if (targetPlatform === "pinterest") {
+        endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.PINTEREST_INFO
+      } else if (targetPlatform === "tiktok") {
+        endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.TIKTOK_INFO
+      } else {
+        return this.createError("Unsupported platform", "Please use YouTube, Pinterest, or TikTok")
+      }
+
       const response = await this.serverManager.makeRequest(
-        APP_CONFIG.PYTHON_SERVER.ENDPOINTS.VIDEO_INFO,
+        endpoint,
         {
           method: "POST",
           body: JSON.stringify({ url })
@@ -219,9 +231,9 @@ class IPCHandlers {
 
       return this.createSuccess(videoInfo)
     } catch (error) {
-      console.error("Video info extraction failed:", error.message)
+      console.error("Info extraction failed:", error.message)
       return this.createError(
-        "Failed to get video information",
+        error.message || "Failed to get media information",
         "Please check the URL and try again"
       )
     }
@@ -234,18 +246,34 @@ class IPCHandlers {
     let video_format_id = "unknown" // default for error tracking
 
     try {
+      const targetPlatform = data?.platform ? String(data.platform).toLowerCase() : "youtube"
+      if (targetPlatform !== "youtube" && targetPlatform !== "pinterest" && targetPlatform !== "tiktok") {
+        return this.createError("Unsupported platform", "Please use YouTube, Pinterest, or TikTok")
+      }
+
       // validate input
-      this.validateRequest(data, ["url", "video_format_id", "audio_format_id"])
+      if (targetPlatform === "youtube") {
+        this.validateRequest(data, ["url", "video_format_id", "audio_format_id"])
+      } else {
+        // pinterest and tiktok only need the url
+        this.validateRequest(data, ["url"])
+      }
       const {
         url,
         video_format_id: videoFormatId,
         audio_format_id: audioFormatId,
         time_range,
-        title: requestTitle = "video"
+        title: requestTitle = "video",
+        format_id: pinterestFormatId
       } = data
 
       title = requestTitle
-      video_format_id = videoFormatId
+      video_format_id =
+        targetPlatform === "pinterest"
+          ? pinterestFormatId || "pinterest"
+          : targetPlatform === "tiktok"
+          ? pinterestFormatId || "tiktok"
+          : videoFormatId
 
       // check python server
       if (!this.serverManager.isServerReady()) {
@@ -268,24 +296,38 @@ class IPCHandlers {
       this.activeDownloads.get(downloadId).status = "downloading"
 
       try {
-        // prepare request
-        const requestData = {
-          url,
-          video_format_id: videoFormatId,
-          audio_format_id: audioFormatId
-        }
-        if (time_range) {
-          requestData.time_range = time_range
+        let endpoint = null
+        let requestData = null
+
+        if (targetPlatform === "youtube") {
+          endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.DOWNLOAD_COMBINED
+          requestData = {
+            url,
+            video_format_id: videoFormatId,
+            audio_format_id: audioFormatId
+          }
+          if (time_range) {
+            requestData.time_range = time_range
+          }
+        } else if (targetPlatform === "tiktok") {
+          endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.TIKTOK_DOWNLOAD
+          requestData = { url }
+          if (pinterestFormatId) {
+            requestData.format_id = pinterestFormatId
+          }
+        } else {
+          endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.PINTEREST_DOWNLOAD
+          requestData = { url }
+          if (pinterestFormatId) {
+            requestData.format_id = pinterestFormatId
+          }
         }
 
         // download via python server
-        const response = await this.serverManager.makeRequest(
-          APP_CONFIG.PYTHON_SERVER.ENDPOINTS.DOWNLOAD_COMBINED,
-          {
-            method: "POST",
-            body: JSON.stringify(requestData)
-          }
-        )
+        const response = await this.serverManager.makeRequest(endpoint, {
+          method: "POST",
+          body: JSON.stringify(requestData)
+        })
 
         const result = await response.json()
 
@@ -303,8 +345,9 @@ class IPCHandlers {
               : title
             const eventData = {
               type: "combined",
+              platform: targetPlatform,
               video_title: sanitizeTitle(actualTitle),
-              format_quality: extractQuality(videoFormatId),
+              format_quality: extractQuality(video_format_id),
               file_size_mb: Math.round((result.file_size || 0) / (1024 * 1024))
             }
             getTrackEvent()(
@@ -344,7 +387,9 @@ class IPCHandlers {
       try {
         const eventData = {
           error_type: categorizeError(error.message),
+          error_message: sanitizeTitle(error.message),
           type: "combined",
+          platform: data?.platform ? String(data.platform).toLowerCase() : "youtube",
           video_title: sanitizeTitle(title),
           format_quality: extractQuality(video_format_id)
         }
@@ -360,7 +405,7 @@ class IPCHandlers {
       }
 
       return this.createError(
-        "Download failed",
+        error.message || "Download failed",
         "Please try again or check your connection"
       )
     }
@@ -480,6 +525,7 @@ class IPCHandlers {
         const actualFormatId = data?.format_id || format_id
         const eventData = {
           error_type: categorizeError(error.message),
+          error_message: sanitizeTitle(error.message),
           type: "audio",
           video_title: sanitizeTitle(title),
           format_quality: extractQuality(actualFormatId)
@@ -496,7 +542,7 @@ class IPCHandlers {
       }
 
       return this.createError(
-        "Download failed",
+        error.message || "Download failed",
         "Please try again or check your connection"
       )
     }

@@ -4,9 +4,11 @@ import { updaterApi } from "@/lib/api"
 import { motion } from "framer-motion"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
+import { useAppStore } from "@/lib/store"
 import { SearchCard } from "./SearchCard"
 
 export function HeroSection() {
+  const { selectedPlatform } = useAppStore()
   const handleCheckForUpdates = async () => {
     try {
       await updaterApi.checkForUpdates()
@@ -117,7 +119,7 @@ export function HeroSection() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.5, ease: "easeOut" }}
           >
-            <SearchCard />
+            <SearchCard platform={selectedPlatform} />
           </motion.div>
         </div>
       </div>

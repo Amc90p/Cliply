@@ -74,6 +74,60 @@ export interface VideoInfoResponse {
   categories?: string[]
 }
 
+export interface PinterestVideoInfoResponse {
+  title: string
+  duration: number
+  duration_string: string
+  thumbnail: string | null
+  uploader: string
+}
+
+export interface PinterestDownloadRequest {
+  url: string
+  format_id?: string
+}
+
+export interface PinterestDownloadResponse {
+  success: boolean
+  filename: string
+  file_path: string
+  file_size: number
+  download_id: string
+}
+
+export interface TikTokVideoInfoResponse {
+  title: string
+  duration: number
+  duration_string: string
+  thumbnail: string | null
+  uploader: string
+}
+
+export interface TikTokDownloadRequest {
+  url: string
+  format_id?: string
+}
+
+export interface TikTokDownloadResponse {
+  success: boolean
+  filename: string
+  file_path: string
+  file_size: number
+  download_id: string
+}
+
+export type Platform = "youtube" | "pinterest" | "tiktok"
+
+export type MediaInfo =
+  | { platform: "youtube"; data: VideoInfoResponse }
+  | { platform: "pinterest"; data: PinterestVideoInfoResponse }
+  | { platform: "tiktok"; data: TikTokVideoInfoResponse }
+
+export type DownloadRequest =
+  | { platform: "youtube"; data: VideoDownloadRequest | AudioDownloadRequest }
+  | { platform: "pinterest"; data: PinterestDownloadRequest }
+  | { platform: "tiktok"; data: TikTokDownloadRequest }
+
 export interface TimeRange {
   start: number // seconds
   end: number // seconds
@@ -149,8 +203,12 @@ declare global {
   interface Window {
     electronAPI?: {
       video: {
-        getInfo: (url: string) => Promise<IPCResponse<VideoInfoResponse>>
-        downloadCombined: (options: VideoDownloadRequest) => Promise<
+        getInfo: (
+          options: { url: string; platform?: string } | string
+        ) => Promise<IPCResponse<VideoInfoResponse>>
+        downloadCombined: (
+          options: VideoDownloadRequest & { platform?: string }
+        ) => Promise<
           IPCResponse<{
             filename: string
             file_path: string
@@ -159,7 +217,9 @@ declare global {
             type: string
           }>
         >
-        downloadAudio: (options: AudioDownloadRequest) => Promise<
+        downloadAudio: (
+          options: AudioDownloadRequest & { platform?: string }
+        ) => Promise<
           IPCResponse<{
             filename: string
             file_path: string
@@ -168,6 +228,18 @@ declare global {
             type: string
           }>
         >
+      }
+      pinterest: {
+        getInfo: (url: string) => Promise<IPCResponse<PinterestVideoInfoResponse>>
+        download: (
+          options: PinterestDownloadRequest
+        ) => Promise<IPCResponse<PinterestDownloadResponse>>
+      }
+      tiktok: {
+        getInfo: (url: string) => Promise<IPCResponse<TikTokVideoInfoResponse>>
+        download: (
+          options: TikTokDownloadRequest
+        ) => Promise<IPCResponse<TikTokDownloadResponse>>
       }
       download: {
         cancel: (
@@ -294,6 +366,84 @@ export const videoApi = {
   }
 }
 
+export const pinterestApi = {
+  /**
+   * Get Pinterest video information
+   * @param url Pinterest URL
+   * @returns Promise<PinterestVideoInfoResponse>
+   */
+  async getInfo(url: string): Promise<PinterestVideoInfoResponse> {
+    const electronAPI = getElectronAPI()
+    const response = await electronAPI.pinterest.getInfo(url)
+
+    if (!response.success || !response.data) {
+      const errorMessage =
+        response.error?.message || "Failed to get Pinterest video info"
+      console.error("Pinterest info failed:", errorMessage)
+      throw new Error(errorMessage)
+    }
+
+    return response.data
+  },
+
+  /**
+   * Download Pinterest video
+   * @param request Pinterest download request
+   * @returns Promise<{downloadId: string}>
+   */
+  async download(
+    request: PinterestDownloadRequest
+  ): Promise<{ downloadId: string }> {
+    const electronAPI = getElectronAPI()
+    const response = await electronAPI.pinterest.download(request)
+
+    if (!response.success || !response.data) {
+      const errorMessage =
+        response.error?.message || "Failed to download Pinterest video"
+      console.error("Pinterest download failed:", errorMessage)
+      throw new Error(errorMessage)
+    }
+
+    return {
+      downloadId: response.data.download_id
+    }
+  }
+}
+
+export const tiktokApi = {
+  async getInfo(url: string): Promise<TikTokVideoInfoResponse> {
+    const electronAPI = getElectronAPI()
+    const response = await electronAPI.tiktok.getInfo(url)
+
+    if (!response.success || !response.data) {
+      const errorMessage =
+        response.error?.message || "Failed to get TikTok video info"
+      console.error("TikTok info failed:", errorMessage)
+      throw new Error(errorMessage)
+    }
+
+    return response.data
+  },
+
+  async download(
+    request: TikTokDownloadRequest
+  ): Promise<{ downloadId: string }> {
+    const electronAPI = getElectronAPI()
+    const response = await electronAPI.tiktok.download(request)
+
+    if (!response.success || !response.data) {
+      const errorMessage =
+        response.error?.message || "Failed to download TikTok video"
+      console.error("TikTok download failed:", errorMessage)
+      throw new Error(errorMessage)
+    }
+
+    return {
+      downloadId: response.data.download_id
+    }
+  }
+}
+
 // Download management functions
 export const downloadApi = {
   /**
@@ -375,6 +525,17 @@ export const systemApi = {
   async openDownloadFolder(): Promise<boolean> {
     const electronAPI = getElectronAPI()
     const response = await electronAPI.system.openDownloadFolder()
+    return response.success === true
+  },
+
+  /**
+   * Open external URL in system browser
+   * @param url External URL
+   * @returns Promise<boolean>
+   */
+  async openExternal(url: string): Promise<boolean> {
+    const electronAPI = getElectronAPI()
+    const response = await electronAPI.system.openExternal(url)
     return response.success === true
   },
 
