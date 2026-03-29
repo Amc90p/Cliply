@@ -50,6 +50,13 @@ from platforms.pinterest import (
     PinterestDownloadRequest
 )
 
+from platforms.tiktok import (
+    TikTokService,
+    TikTokVideoInfoRequest,
+    TikTokVideoInfoResponse,
+    TikTokDownloadRequest
+)
+
 # Initialize cookies directory
 COOKIES_DIR = get_cookies_directory()
 COOKIES_DIR.mkdir(parents=True, exist_ok=True)
@@ -74,6 +81,9 @@ youtube_service = YouTubeService(FFMPEG_PATH, DENO_PATH, cookie_manager)
 
 # Initialize Pinterest service
 pinterest_service = PinterestService(FFMPEG_PATH, DENO_PATH)
+
+# Initialize TikTok service
+tiktok_service = TikTokService(FFMPEG_PATH, DENO_PATH)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -133,7 +143,7 @@ async def root():
         "message": "Cliply Desktop Server",
         "version": "1.0.0",
         "status": "running",
-        "active_downloads": youtube_service.get_active_downloads_count() + pinterest_service.get_active_downloads_count(),
+        "active_downloads": youtube_service.get_active_downloads_count() + pinterest_service.get_active_downloads_count() + tiktok_service.get_active_downloads_count(),
         "downloads_directory": str(get_downloads_directory()),
         "services": {
             "youtube": {
@@ -142,6 +152,9 @@ async def root():
             },
             "pinterest": {
                 "active_downloads": pinterest_service.get_active_downloads_count()
+            },
+            "tiktok": {
+                "active_downloads": tiktok_service.get_active_downloads_count()
             }
         },
         "ffmpeg_available": FFMPEG_PATH is not None,
@@ -237,6 +250,28 @@ async def download_pinterest_video(request: PinterestDownloadRequest):
     try:
         download_dir = get_downloads_directory()
         result = await pinterest_service.download_video(request, download_dir)
+        return JSONResponse(result)
+    except Exception as e:
+        raise
+
+
+# =============================================================================
+# TIKTOK ENDPOINTS
+# =============================================================================
+
+@app.post("/api/tiktok/info", response_model=TikTokVideoInfoResponse)
+async def get_tiktok_info(request: TikTokVideoInfoRequest):
+    """Get TikTok video information"""
+    download_dir = get_downloads_directory()
+    return await tiktok_service.get_video_info(request, download_dir)
+
+
+@app.post("/api/tiktok/download")
+async def download_tiktok_video(request: TikTokDownloadRequest):
+    """Download TikTok video"""
+    try:
+        download_dir = get_downloads_directory()
+        result = await tiktok_service.download_video(request, download_dir)
         return JSONResponse(result)
     except Exception as e:
         raise

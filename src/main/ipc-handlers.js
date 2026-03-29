@@ -213,8 +213,10 @@ class IPCHandlers {
         endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.VIDEO_INFO
       } else if (targetPlatform === "pinterest") {
         endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.PINTEREST_INFO
+      } else if (targetPlatform === "tiktok") {
+        endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.TIKTOK_INFO
       } else {
-        return this.createError("Unsupported platform", "Please use YouTube or Pinterest")
+        return this.createError("Unsupported platform", "Please use YouTube, Pinterest, or TikTok")
       }
 
       const response = await this.serverManager.makeRequest(
@@ -245,14 +247,15 @@ class IPCHandlers {
 
     try {
       const targetPlatform = data?.platform ? String(data.platform).toLowerCase() : "youtube"
-      if (targetPlatform !== "youtube" && targetPlatform !== "pinterest") {
-        return this.createError("Unsupported platform", "Please use YouTube or Pinterest")
+      if (targetPlatform !== "youtube" && targetPlatform !== "pinterest" && targetPlatform !== "tiktok") {
+        return this.createError("Unsupported platform", "Please use YouTube, Pinterest, or TikTok")
       }
 
       // validate input
       if (targetPlatform === "youtube") {
         this.validateRequest(data, ["url", "video_format_id", "audio_format_id"])
       } else {
+        // pinterest and tiktok only need the url
         this.validateRequest(data, ["url"])
       }
       const {
@@ -268,6 +271,8 @@ class IPCHandlers {
       video_format_id =
         targetPlatform === "pinterest"
           ? pinterestFormatId || "pinterest"
+          : targetPlatform === "tiktok"
+          ? pinterestFormatId || "tiktok"
           : videoFormatId
 
       // check python server
@@ -303,6 +308,12 @@ class IPCHandlers {
           }
           if (time_range) {
             requestData.time_range = time_range
+          }
+        } else if (targetPlatform === "tiktok") {
+          endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.TIKTOK_DOWNLOAD
+          requestData = { url }
+          if (pinterestFormatId) {
+            requestData.format_id = pinterestFormatId
           }
         } else {
           endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.PINTEREST_DOWNLOAD
@@ -376,6 +387,7 @@ class IPCHandlers {
       try {
         const eventData = {
           error_type: categorizeError(error.message),
+          error_message: sanitizeTitle(error.message),
           type: "combined",
           platform: data?.platform ? String(data.platform).toLowerCase() : "youtube",
           video_title: sanitizeTitle(title),
@@ -393,7 +405,7 @@ class IPCHandlers {
       }
 
       return this.createError(
-        "Download failed",
+        error.message || "Download failed",
         "Please try again or check your connection"
       )
     }
@@ -513,6 +525,7 @@ class IPCHandlers {
         const actualFormatId = data?.format_id || format_id
         const eventData = {
           error_type: categorizeError(error.message),
+          error_message: sanitizeTitle(error.message),
           type: "audio",
           video_title: sanitizeTitle(title),
           format_quality: extractQuality(actualFormatId)
@@ -529,7 +542,7 @@ class IPCHandlers {
       }
 
       return this.createError(
-        "Download failed",
+        error.message || "Download failed",
         "Please try again or check your connection"
       )
     }

@@ -2,6 +2,7 @@ import { z } from "zod"
 
 const YOUTUBE_URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)[\w-]+/
 const PINTEREST_URL_REGEX = /^https?:\/\/(www\.)?(pinterest\.com\/pin\/[\w-]+|pin\.it\/[\w-]+)/
+const TIKTOK_URL_REGEX = /^https?:\/\/(?:(?:www\.)?tiktok\.com\/@[\w.-]+\/video\/\d+|vm\.tiktok\.com\/[\w-]+|vt\.tiktok\.com\/[\w-]+|(?:www\.)?tiktok\.com\/t\/[\w-]+|(?:www\.)?tiktok\.com\/embed\/\d+)/
 
 export const youtubeUrlSchema = z.object({
   url: z
@@ -32,14 +33,33 @@ export const isValidPinterestUrl = (url: string): boolean => {
   return PINTEREST_URL_REGEX.test(url)
 }
 
+export const tiktokUrlSchema = z.object({
+  url: z
+    .string()
+    .min(1, "Please enter a TikTok URL")
+    .refine(
+      (url: string) => TIKTOK_URL_REGEX.test(url),
+      "Please enter a valid TikTok URL"
+    )
+})
+
+export type TikTokUrlFormData = z.infer<typeof tiktokUrlSchema>
+
+export const isValidTikTokUrl = (url: string): boolean => {
+  return TIKTOK_URL_REGEX.test(url)
+}
+
 export const detectPlatform = (
   url: string
-): "youtube" | "pinterest" | null => {
+): "youtube" | "pinterest" | "tiktok" | null => {
   if (YOUTUBE_URL_REGEX.test(url)) {
     return "youtube"
   }
   if (PINTEREST_URL_REGEX.test(url)) {
     return "pinterest"
+  }
+  if (TIKTOK_URL_REGEX.test(url)) {
+    return "tiktok"
   }
   return null
 }

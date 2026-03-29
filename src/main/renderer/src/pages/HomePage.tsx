@@ -1,20 +1,25 @@
 import { PinterestLayout } from "@/components/pinterest"
+import { TikTokLayout } from "@/components/tiktok"
 import { AnimatePresence } from "framer-motion"
 import { HeroSection } from "../components/hero/HeroSection"
 import { VideoLayout } from "../components/video/VideoLayout"
 import { usePinterestStore } from "../lib/pinterestStore"
 import { useAppStore } from "../lib/store"
+import { useTikTokStore } from "../lib/tiktokStore"
 import { useYouTubeStore } from "../lib/youtubeStore"
 
 export function HomePage() {
   const { selectedPlatform, showMediaDetails } = useAppStore()
   const { videoInfo } = useYouTubeStore()
   const { pinInfo } = usePinterestStore()
+  const { videoInfo: tikTokInfo } = useTikTokStore()
 
   const shouldShowYouTubeLayout =
     selectedPlatform === "youtube" && showMediaDetails && videoInfo
   const shouldShowPinterestLayout =
     selectedPlatform === "pinterest" && showMediaDetails && pinInfo
+  const shouldShowTikTokLayout =
+    selectedPlatform === "tiktok" && showMediaDetails && tikTokInfo
 
   return (
     <AnimatePresence mode="wait">
@@ -22,6 +27,8 @@ export function HomePage() {
         <VideoLayout key="video-layout" />
       ) : shouldShowPinterestLayout ? (
         <PinterestLayout key="pinterest-layout" />
+      ) : shouldShowTikTokLayout ? (
+        <TikTokLayout key="tiktok-layout" />
       ) : (
         <HeroSection key="hero-section" />
       )}

@@ -1,10 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import type { Resolver } from "react-hook-form"
 
-import { pinterestApi, videoApi } from "@/lib/api"
+import { pinterestApi, tiktokApi, videoApi } from "@/lib/api"
 import { usePinterestStore } from "@/lib/pinterestStore"
 import type { Platform } from "@/lib/store"
-import { pinterestUrlSchema, youtubeUrlSchema } from "@/lib/validation"
+import { useTikTokStore } from "@/lib/tiktokStore"
+import { pinterestUrlSchema, tiktokUrlSchema, youtubeUrlSchema } from "@/lib/validation"
 import { useYouTubeStore } from "@/lib/youtubeStore"
 
 interface PlatformStoreAccessor {
@@ -96,6 +97,36 @@ export const PLATFORM_REGISTRY: Record<Platform, PlatformConfig> = {
         usePinterestStore.getState().setIsLoadingPinInfo(loading),
       hasInfo: () => usePinterestStore.getState().pinInfo !== null,
       reset: () => usePinterestStore.getState().reset()
+    }
+  },
+  tiktok: {
+    id: "tiktok",
+    label: "tiktok",
+    logo: "/tiktok-logo.svg",
+    formResolver: zodResolver(tiktokUrlSchema),
+    placeholder: "paste video url here...",
+    helperText: "supports tiktok.com/@user/video/ID, vm.tiktok.com, and vt.tiktok.com links",
+    loadingText: "\u{1F40B} getting video information",
+    successMessage: "Video information loaded successfully!",
+    errorMessages: {
+      invalidUrl: "Invalid TikTok URL",
+      invalidUrlToast: "Please enter a valid TikTok URL",
+      unavailable: "This video is not available for download",
+      genericFail: "TikTok blocked this request — please try again in a moment",
+      logPrefix: "TikTok info request failed:"
+    },
+    fetchAndStore: async (url: string) => {
+      const info = await tiktokApi.getInfo(url)
+      useTikTokStore.getState().setVideoInfo(info)
+    },
+    store: {
+      getUrl: () => useTikTokStore.getState().url,
+      setUrl: (url) => useTikTokStore.getState().setUrl(url),
+      isLoading: () => useTikTokStore.getState().isLoadingVideoInfo,
+      setIsLoading: (loading) =>
+        useTikTokStore.getState().setIsLoadingVideoInfo(loading),
+      hasInfo: () => useTikTokStore.getState().videoInfo !== null,
+      reset: () => useTikTokStore.getState().reset()
     }
   }
 }

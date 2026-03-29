@@ -30,7 +30,9 @@ const APP_CONFIG = {
       DOWNLOAD_COMBINED: "/api/video/download-combined",
       DOWNLOAD_AUDIO: "/api/audio/download",
       PINTEREST_INFO: "/api/pinterest/info",
-      PINTEREST_DOWNLOAD: "/api/pinterest/download"
+      PINTEREST_DOWNLOAD: "/api/pinterest/download",
+      TIKTOK_INFO: "/api/tiktok/info",
+      TIKTOK_DOWNLOAD: "/api/tiktok/download"
     }
   },
 

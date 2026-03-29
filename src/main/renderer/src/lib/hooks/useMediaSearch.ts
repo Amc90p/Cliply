@@ -8,6 +8,7 @@ import {
 } from "@/lib/platform-config"
 import { usePinterestStore } from "@/lib/pinterestStore"
 import { useAppStore, type Platform } from "@/lib/store"
+import { useTikTokStore } from "@/lib/tiktokStore"
 import {
   showServerOverwhelmedToast,
   showServerStartingToast
@@ -47,10 +48,14 @@ export function useMediaSearch(
   const ytIsLoading = useYouTubeStore((s) => s.isLoadingVideoInfo)
   const ptUrl = usePinterestStore((s) => s.url)
   const ptIsLoading = usePinterestStore((s) => s.isLoadingPinInfo)
+  const ttUrl = useTikTokStore((s) => s.url)
+  const ttIsLoading = useTikTokStore((s) => s.isLoadingVideoInfo)
 
   // Select reactive state for the current platform
-  const url = platform === "youtube" ? ytUrl : ptUrl
-  const isLoading = platform === "youtube" ? ytIsLoading : ptIsLoading
+  const url =
+    platform === "youtube" ? ytUrl : platform === "tiktok" ? ttUrl : ptUrl
+  const isLoading =
+    platform === "youtube" ? ytIsLoading : platform === "tiktok" ? ttIsLoading : ptIsLoading
 
   const form = useForm<{ url: string }>({
     resolver: config.formResolver,

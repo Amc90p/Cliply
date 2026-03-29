@@ -95,15 +95,38 @@ export interface PinterestDownloadResponse {
   download_id: string
 }
 
-export type Platform = "youtube" | "pinterest"
+export interface TikTokVideoInfoResponse {
+  title: string
+  duration: number
+  duration_string: string
+  thumbnail: string | null
+  uploader: string
+}
+
+export interface TikTokDownloadRequest {
+  url: string
+  format_id?: string
+}
+
+export interface TikTokDownloadResponse {
+  success: boolean
+  filename: string
+  file_path: string
+  file_size: number
+  download_id: string
+}
+
+export type Platform = "youtube" | "pinterest" | "tiktok"
 
 export type MediaInfo =
   | { platform: "youtube"; data: VideoInfoResponse }
   | { platform: "pinterest"; data: PinterestVideoInfoResponse }
+  | { platform: "tiktok"; data: TikTokVideoInfoResponse }
 
 export type DownloadRequest =
   | { platform: "youtube"; data: VideoDownloadRequest | AudioDownloadRequest }
   | { platform: "pinterest"; data: PinterestDownloadRequest }
+  | { platform: "tiktok"; data: TikTokDownloadRequest }
 
 export interface TimeRange {
   start: number // seconds
@@ -211,6 +234,12 @@ declare global {
         download: (
           options: PinterestDownloadRequest
         ) => Promise<IPCResponse<PinterestDownloadResponse>>
+      }
+      tiktok: {
+        getInfo: (url: string) => Promise<IPCResponse<TikTokVideoInfoResponse>>
+        download: (
+          options: TikTokDownloadRequest
+        ) => Promise<IPCResponse<TikTokDownloadResponse>>
       }
       download: {
         cancel: (
@@ -372,6 +401,40 @@ export const pinterestApi = {
       const errorMessage =
         response.error?.message || "Failed to download Pinterest video"
       console.error("Pinterest download failed:", errorMessage)
+      throw new Error(errorMessage)
+    }
+
+    return {
+      downloadId: response.data.download_id
+    }
+  }
+}
+
+export const tiktokApi = {
+  async getInfo(url: string): Promise<TikTokVideoInfoResponse> {
+    const electronAPI = getElectronAPI()
+    const response = await electronAPI.tiktok.getInfo(url)
+
+    if (!response.success || !response.data) {
+      const errorMessage =
+        response.error?.message || "Failed to get TikTok video info"
+      console.error("TikTok info failed:", errorMessage)
+      throw new Error(errorMessage)
+    }
+
+    return response.data
+  },
+
+  async download(
+    request: TikTokDownloadRequest
+  ): Promise<{ downloadId: string }> {
+    const electronAPI = getElectronAPI()
+    const response = await electronAPI.tiktok.download(request)
+
+    if (!response.success || !response.data) {
+      const errorMessage =
+        response.error?.message || "Failed to download TikTok video"
+      console.error("TikTok download failed:", errorMessage)
       throw new Error(errorMessage)
     }
 

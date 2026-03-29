@@ -2,13 +2,16 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   pinterestApi,
+  tiktokApi,
   systemApi,
   validateTimeRange,
   type PinterestVideoInfoResponse,
+  type TikTokVideoInfoResponse,
   type VideoFormat
 } from "@/lib/api"
 import { useServerStatus } from "@/lib/hooks/useServerStatus"
 import { usePinterestStore } from "@/lib/pinterestStore"
+import { useTikTokStore } from "@/lib/tiktokStore"
 import { useYouTubeStore } from "@/lib/youtubeStore"
 import {
   showServerOverwhelmedToast,
@@ -41,14 +44,27 @@ type PinterestDownloadCardProps = {
   className?: string
 }
 
+type TikTokDownloadCardProps = {
+  platform: "tiktok"
+  tikTokInfo: TikTokVideoInfoResponse
+  className?: string
+}
+
 type UnifiedDownloadCardProps =
   | YouTubeDownloadCardProps
   | PinterestDownloadCardProps
+  | TikTokDownloadCardProps
 
 export function UnifiedDownloadCard(props: UnifiedDownloadCardProps) {
   if (props.platform === "pinterest") {
     return (
       <PinterestDownloadCard pinInfo={props.pinInfo} className={props.className} />
+    )
+  }
+
+  if (props.platform === "tiktok") {
+    return (
+      <TikTokDownloadCard tikTokInfo={props.tikTokInfo} className={props.className} />
     )
   }
 
@@ -184,55 +200,20 @@ function YouTubeDownloadCard({
   )
 }
 
-function PinterestDownloadCard({
-  pinInfo,
+// Shared UI for Pinterest and TikTok — both are single-quality, single-button downloads
+function SimpleVideoDownloadCard({
+  videoInfo,
+  subtitle,
+  isDownloading,
+  onDownload,
   className
 }: {
-  pinInfo: PinterestVideoInfoResponse
+  videoInfo: { title: string; uploader: string; duration_string: string }
+  subtitle: string
+  isDownloading: boolean
+  onDownload: () => void
   className?: string
 }) {
-  const { url, isDownloading, setIsDownloading } = usePinterestStore()
-  const serverStatus = useServerStatus()
-
-  const handleDownload = async () => {
-    if (!url || isDownloading) return
-
-    if (serverStatus.isStarting) {
-      showServerStartingToast()
-      return
-    }
-
-    if (!serverStatus.isReady && !serverStatus.isUnknown) {
-      toast.error("Download engine not ready", {
-        description: "Please wait for the download engine to start"
-      })
-      return
-    }
-
-    try {
-      setIsDownloading(true)
-      await pinterestApi.download({ url })
-      toast.success("Download complete!", {
-        action: {
-          label: "Open Folder",
-          onClick: () => systemApi.openDownloadFolder()
-        }
-      })
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to download video"
-      if (message.includes("Download engine starting")) {
-        showServerStartingToast()
-      } else if (message.includes("network") || message.includes("fetch")) {
-        showServerOverwhelmedToast()
-      } else {
-        toast.error("Download failed", { description: message })
-      }
-    } finally {
-      setIsDownloading(false)
-    }
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -249,23 +230,23 @@ function PinterestDownloadCard({
       <div className="p-6 space-y-4">
         <div className="space-y-1">
           <h3 className="text-base font-medium text-slate-900 dark:text-white">
-            Download Pinterest Video
+            Download Video
           </h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Best available quality, saved as MP4.
+            {subtitle}
           </p>
         </div>
 
         <div className="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-900/30 p-4 text-sm text-slate-600 dark:text-slate-400">
           <p className="font-medium text-slate-900 dark:text-white line-clamp-2">
-            {pinInfo.title}
+            {videoInfo.title}
           </p>
-          <p className="mt-1">Uploader: {pinInfo.uploader}</p>
-          <p>Duration: {pinInfo.duration_string}</p>
+          <p className="mt-1">Uploader: {videoInfo.uploader}</p>
+          <p>Duration: {videoInfo.duration_string}</p>
         </div>
 
         <Button
-          onClick={handleDownload}
+          onClick={onDownload}
           disabled={isDownloading}
           className={cn(
             "w-full h-12 text-base font-semibold rounded-xl transition-all duration-200",
@@ -277,5 +258,89 @@ function PinterestDownloadCard({
         </Button>
       </div>
     </motion.div>
+  )
+}
+
+function PinterestDownloadCard({
+  pinInfo,
+  className
+}: {
+  pinInfo: PinterestVideoInfoResponse
+  className?: string
+}) {
+  const { url, isDownloading, setIsDownloading } = usePinterestStore()
+  const serverStatus = useServerStatus()
+
+  const handleDownload = async () => {
+    if (!url || isDownloading) return
+    if (serverStatus.isStarting) { showServerStartingToast(); return }
+    if (!serverStatus.isReady && !serverStatus.isUnknown) {
+      toast.error("Download engine not ready", { description: "Please wait for the download engine to start" })
+      return
+    }
+    try {
+      setIsDownloading(true)
+      await pinterestApi.download({ url })
+      toast.success("Download complete!", { action: { label: "Open Folder", onClick: () => systemApi.openDownloadFolder() } })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to download video"
+      if (message.includes("Download engine starting")) { showServerStartingToast() }
+      else if (message.includes("network") || message.includes("fetch")) { showServerOverwhelmedToast() }
+      else { toast.error("Download failed", { description: message }) }
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  return (
+    <SimpleVideoDownloadCard
+      videoInfo={pinInfo}
+      subtitle="Best available quality, saved as MP4."
+      isDownloading={isDownloading}
+      onDownload={handleDownload}
+      className={className}
+    />
+  )
+}
+
+function TikTokDownloadCard({
+  tikTokInfo,
+  className
+}: {
+  tikTokInfo: TikTokVideoInfoResponse
+  className?: string
+}) {
+  const { url, isDownloading, setIsDownloading } = useTikTokStore()
+  const serverStatus = useServerStatus()
+
+  const handleDownload = async () => {
+    if (!url || isDownloading) return
+    if (serverStatus.isStarting) { showServerStartingToast(); return }
+    if (!serverStatus.isReady && !serverStatus.isUnknown) {
+      toast.error("Download engine not ready", { description: "Please wait for the download engine to start" })
+      return
+    }
+    try {
+      setIsDownloading(true)
+      await tiktokApi.download({ url })
+      toast.success("Download complete!", { action: { label: "Open Folder", onClick: () => systemApi.openDownloadFolder() } })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to download video"
+      if (message.includes("Download engine starting")) { showServerStartingToast() }
+      else if (message.includes("network") || message.includes("fetch")) { showServerOverwhelmedToast() }
+      else { toast.error("Download failed", { description: message }) }
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  return (
+    <SimpleVideoDownloadCard
+      videoInfo={tikTokInfo}
+      subtitle="Best available quality, saved as MP4. No watermark."
+      isDownloading={isDownloading}
+      onDownload={handleDownload}
+      className={className}
+    />
   )
 }

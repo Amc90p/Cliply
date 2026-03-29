@@ -104,7 +104,8 @@ export function URLInput({ form, onFocusChange, isLoading, platform }: URLInputP
                 "select-none cursor-pointer overflow-hidden",
                 "transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
                 isOpen ? "rounded-2xl" : "rounded-xl",
-                "border dark:border-slate-700/40 border-slate-200/50"
+                "border dark:border-slate-700/40 border-slate-200/50",
+                "dark:bg-slate-800 bg-white"
               )}
               onClick={() => setIsOpen((o) => !o)}
             >

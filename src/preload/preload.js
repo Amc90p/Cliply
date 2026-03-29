@@ -81,6 +81,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
       })
   },
 
+  // tiktok operations
+  tiktok: {
+    getInfo: (url) =>
+      invoke(IPC_CHANNELS.VIDEO_GET_INFO, { url, platform: "tiktok" }),
+    download: (options) =>
+      invoke(IPC_CHANNELS.VIDEO_DOWNLOAD_COMBINED, {
+        ...options,
+        platform: "tiktok"
+      })
+  },
+
   // download management
   download: {
     cancel: (downloadId) =>
