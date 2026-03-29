@@ -102,11 +102,13 @@
         "to": "python/",
         "filter": [
           "server.py",
+          "shared_utils.py",
+          "platforms/**/*.py",
           "requirements.txt",
           "cookies/**/*",
           "!venv/**/*",
-          "!__pycache__/**/*",
-          "!*.pyc"
+          "!**/__pycache__/**/*",
+          "!**/*.pyc"
         ]
       }
     ],
@@ -218,6 +220,20 @@
             "!**/test",
             "!**/tests"
           ]
+        },
+        {
+          "from": "python/",
+          "to": "python/",
+          "filter": [
+            "server.py",
+            "shared_utils.py",
+            "platforms/**/*.py",
+            "requirements.txt",
+            "cookies/**/*",
+            "!venv/**/*",
+            "!**/__pycache__/**/*",
+            "!**/*.pyc"
+          ]
         }
       ]
     },
@@ -271,6 +287,20 @@
             "!**/*.pyc",
             "!**/test",
             "!**/tests"
+          ]
+        },
+        {
+          "from": "python/",
+          "to": "python/",
+          "filter": [
+            "server.py",
+            "shared_utils.py",
+            "platforms/**/*.py",
+            "requirements.txt",
+            "cookies/**/*",
+            "!venv/**/*",
+            "!**/__pycache__/**/*",
+            "!**/*.pyc"
           ]
         }
       ]

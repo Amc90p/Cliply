@@ -264,15 +264,15 @@ class IPCHandlers {
         audio_format_id: audioFormatId,
         time_range,
         title: requestTitle = "video",
-        format_id: pinterestFormatId
+        format_id: simpleFormatId
       } = data
 
       title = requestTitle
       video_format_id =
         targetPlatform === "pinterest"
-          ? pinterestFormatId || "pinterest"
+          ? simpleFormatId || "pinterest"
           : targetPlatform === "tiktok"
-          ? pinterestFormatId || "tiktok"
+          ? simpleFormatId || "tiktok"
           : videoFormatId
 
       // check python server
@@ -312,14 +312,14 @@ class IPCHandlers {
         } else if (targetPlatform === "tiktok") {
           endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.TIKTOK_DOWNLOAD
           requestData = { url }
-          if (pinterestFormatId) {
-            requestData.format_id = pinterestFormatId
+          if (simpleFormatId) {
+            requestData.format_id = simpleFormatId
           }
         } else {
           endpoint = APP_CONFIG.PYTHON_SERVER.ENDPOINTS.PINTEREST_DOWNLOAD
           requestData = { url }
-          if (pinterestFormatId) {
-            requestData.format_id = pinterestFormatId
+          if (simpleFormatId) {
+            requestData.format_id = simpleFormatId
           }
         }
 

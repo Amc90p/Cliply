@@ -41,7 +41,7 @@ export const PLATFORM_REGISTRY: Record<Platform, PlatformConfig> = {
   youtube: {
     id: "youtube",
     label: "youtube",
-    logo: "/youtube-logo.svg",
+    logo: "./youtube-logo.svg",
     formResolver: zodResolver(youtubeUrlSchema),
     placeholder: "paste video url here...",
     helperText:
@@ -72,7 +72,7 @@ export const PLATFORM_REGISTRY: Record<Platform, PlatformConfig> = {
   pinterest: {
     id: "pinterest",
     label: "pinterest",
-    logo: "/pinterest-logo.svg",
+    logo: "./pinterest-logo.svg",
     formResolver: zodResolver(pinterestUrlSchema),
     placeholder: "paste video url here...",
     helperText: "supports pinterest videos from pin.it urls",
@@ -102,7 +102,7 @@ export const PLATFORM_REGISTRY: Record<Platform, PlatformConfig> = {
   tiktok: {
     id: "tiktok",
     label: "tiktok",
-    logo: "/tiktok-logo.svg",
+    logo: "./tiktok-logo.svg",
     formResolver: zodResolver(tiktokUrlSchema),
     placeholder: "paste video url here...",
     helperText: "supports tiktok.com/@user/video/ID, vm.tiktok.com, and vt.tiktok.com links",
